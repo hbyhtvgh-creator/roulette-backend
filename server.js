@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -13,119 +12,49 @@ let adminAccount = {
   password: process.env.ADMIN_PASSWORD || '12345678'
 };
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'hbyhtvgh@gmail.com';
-
-// የኢሜይል መላኪያ ቅንብር (Nodemailer)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: ADMIN_EMAIL,
-    pass: process.env.GMAIL_APP_PASSWORD || ''
-  }
-});
-
 // የዳታ መያዣዎች
 let users = []; // የተጫዋቾች ዝርዝር
-let currentOTP = null;
-let otpExpiry = null;
 
 // ====================================================
-// A. የአድሚን ሎጊን እና 2FA (EMAIL OTP)
+// A. የአድሚን ሎጊን (ያለ ኢሜይል / 2FA ኮድ)
 // ====================================================
 
-// 1. የአድሚን መግቢያ ደረጃ 1 (Username & Password)
-app.post('/api/admin/login-step1', async (req, res) => {
+// 1. የአድሚን መግቢያ
+app.post('/api/admin/login-step1', (req, res) => {
   const { username, password } = req.body;
 
   if (username !== adminAccount.username || password !== adminAccount.password) {
     return res.status(401).json({ success: false, message: "የተሳሳተ የአድሚን ስም ወይም ፓስወርድ!" });
   }
 
-  // ባለ 6 ዲጂት OTP ማፍለቅ
-  currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
-  otpExpiry = Date.now() + 5 * 60 * 1000; // ለ 5 ደቂቃ የሚያገለግል
-
-  try {
-    await transporter.sendMail({
-      from: `"Game Security" <${ADMIN_EMAIL}>`,
-      to: ADMIN_EMAIL,
-      subject: '🔐 የአድሚን 2FA ማረጋገጫ ኮድ',
-      html: `
-        <div style="font-family: Arial; padding: 20px; background: #f4f4f4;">
-          <h2>የአድሚን ሎጊን ማረጋገጫ</h2>
-          <p>ወደ አድሚን ገጽ ለመግባት የተላከው ባለ 6 ዲጂት ኮድ፡</p>
-          <h1 style="color: #27ae60; letter-spacing: 5px;">${currentOTP}</h1>
-          <p>⚠️ ይህ ኮድ የሚያበቃው በ 5 ደቂቃ ውስጥ ነው።</p>
-        </div>
-      `
-    });
-    res.json({ success: true, message: "የ 6 ዲጂት ማረጋገጫ ኮድ ወደ ኢሜይልዎ ተልኳል!" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "ኢሜይሉን መላክ አልተቻለም! App Password መኖሩን ያረጋግጡ።" });
-  }
+  // ያለ ምንም ኢሜይል ቀጥታ መግባት
+  res.json({ success: true, message: "በተሳካ ሁኔታ ገብተዋል! ወደ ዳሽቦርድ በመግባት ላይ..." });
 });
 
-// 2. የአድሚን 2FA ማረጋገጫ
+// 2. የድሮ ፍሮንት-ኤንድ ጥሪዎች ካሉ እንዳይሰበሩ የተደረገ (Verify 2FA Stub)
 app.post('/api/admin/verify-2fa', (req, res) => {
-  const { otp } = req.body;
-
-  if (!currentOTP || Date.now() > otpExpiry) {
-    currentOTP = null;
-    return res.status(400).json({ success: false, message: "የኮዱ ጊዜ አልፏል! ድጋሚ ይሞክሩ።" });
-  }
-
-  if (otp !== currentOTP) {
-    return res.status(401).json({ success: false, message: "የተሳሳተ የ 2FA ኮድ!" });
-  }
-
-  currentOTP = null;
-  res.json({ success: true, message: "በተካካይ ገብተዋል!" });
+  res.json({ success: true, message: "በተሳካ ሁኔታ ገብተዋል!" });
 });
 
 // ====================================================
-// B. FORGOT PASSWORD SYSTEM
+// B. FORGOT PASSWORD SYSTEM (ያለ ኢሜይል ኮድ)
 // ====================================================
 
-// 1. የፓስወርድ መለወጫ ኮድ በኢሜይል መላክ
-app.post('/api/admin/forgot-password', async (req, res) => {
-  currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
-  otpExpiry = Date.now() + 5 * 60 * 1000;
-
-  try {
-    await transporter.sendMail({
-      from: `"Game Security" <${ADMIN_EMAIL}>`,
-      to: ADMIN_EMAIL,
-      subject: '🔑 የፓስወርድ መቀየሪያ ኮድ',
-      html: `
-        <div style="font-family: Arial; padding: 20px; background: #fff3cd;">
-          <h2>የፓስወርድ መቀየሪያ ጥያቄ</h2>
-          <p>አዲስ ፓስወርድ ለማስገባት የተላከው ኮድ፡</p>
-          <h1 style="color: #c0392b; letter-spacing: 5px;">${currentOTP}</h1>
-        </div>
-      `
-    });
-    res.json({ success: true, message: "የፓስወርድ መቀየሪያ ኮድ ወደ ኢሜይልዎ ተልኳል!" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "ኢሜይል መላክ አልተቻለም!" });
-  }
+// 1. የፓስወርድ መለወጫ ጥያቄ
+app.post('/api/admin/forgot-password', (req, res) => {
+  res.json({ success: true, message: "እባክዎን አዲሱን ፓስወርድ ያስገቡ!" });
 });
 
 // 2. አዲስ ፓስወርድ ማረጋገጥና መተካት
 app.post('/api/admin/reset-password', (req, res) => {
-  const { otp, newPassword } = req.body;
+  const { newPassword } = req.body;
 
-  if (!currentOTP || Date.now() > otpExpiry) {
-    return res.status(400).json({ success: false, message: "የኮዱ ጊዜ አልፏል!" });
-  }
-
-  if (otp !== currentOTP) {
-    return res.status(401).json({ success: false, message: "የተሳሳተ ኮድ! ፓስወርዱ አልተቀየረም።" });
+  if (!newPassword) {
+    return res.status(400).json({ success: false, message: "እባክዎን አዲስ ፓስወርድ ያስገቡ!" });
   }
 
   adminAccount.password = newPassword;
-  currentOTP = null;
-  res.json({ success: true, message: "ፓስወርዱ በተካካይ ተቀይሯል! በአዲሱ ፓስወርድ መግባት ይችላሉ።" });
+  res.json({ success: true, message: "ፓስወርዱ በተሳካ ሁኔታ ተቀይሯል! በአዲሱ ፓስወርድ መግባት ይችላሉ።" });
 });
 
 // ====================================================
